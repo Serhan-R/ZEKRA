@@ -28,7 +28,10 @@ def get_cfg(proj):
     return cfg
 
 def get_execution_path(proj, cfg):
-    initial_state = proj.factory.entry_state()
+    
+    program_args = ['./main']
+    initial_state = proj.factory.entry_state(args=program_args)
+
     simgr = proj.factory.simgr(initial_state)
     transitions  = []
     initial_node = 0
@@ -43,20 +46,26 @@ def get_execution_path(proj, cfg):
                 first_step=False
             if len(simgr.active)==1:
                 jumpkind=list(simgr.active[0].history.jumpkinds)[-1]
+                
+                # API fix for _model_concrete ---
+                target = simgr.active[0].history.jump_target
+                dst_addr = target if isinstance(target, int) else simgr.active[0].solver.eval(target)
+                
+
                 if jumpkind=='Ijk_Call':
                     transitions.append({
                         'jumpkind':'call', 
-                        'dst':simgr.active[0].history.jump_target._model_concrete.value, 
+                        'dst':dst_addr, 
                         'ret':simgr.active[0].callstack.ret_addr})
                 elif jumpkind=='Ijk_Ret':
                     transitions.append({
                         'jumpkind':'ret', 
-                        'dst':simgr.active[0].history.jump_target._model_concrete.value, 
+                        'dst':dst_addr, 
                         'ret':None})
                 elif jumpkind=='Ijk_Boring':
                     transitions.append({
                         'jumpkind':'jump', 
-                        'dst':simgr.active[0].history.jump_target._model_concrete.value, 
+                        'dst':dst_addr, 
                         'ret':None})
                 elif jumpkind=='Ijk_Exit':
                     end_state='reached an exit'
@@ -75,19 +84,25 @@ def get_execution_path(proj, cfg):
 
     # add missing nodes and edges
     state=initial_node
+    # Use cfg.model.get_all_nodes() for modern angr
     for transition in transitions:
         if transition['jumpkind']=='call':
-            if len(cfg.get_all_nodes(transition['ret']))==0: # return node does not exist in the current CFG
+            if len(cfg.model.get_all_nodes(transition['ret']))==0: # return node does not exist in the current CFG
                 node=CFGNode(transition['ret'], 0, cfg)
                 cfg.graph.add_node(node) # just add it to the CFG
-        if len(cfg.get_all_nodes(transition['dst']))==0: # destination node does not exist in the current CFG
+        if len(cfg.model.get_all_nodes(transition['dst']))==0: # destination node does not exist in the current CFG
             node=CFGNode(transition['dst'], 0, cfg)
             cfg.graph.add_node(node) # just add it to the CFG
-        edge=(cfg.get_all_nodes(state)[0], cfg.get_all_nodes(transition['dst'])[0])
+        edge=(cfg.model.get_all_nodes(state)[0], cfg.model.get_all_nodes(transition['dst'])[0])
         cfg.graph.add_edge(edge[0],edge[1]) # adds edge if it doesn't already exist
         state=transition['dst']
 
-    final_node=transitions[-1]['dst']
+    # Handle case where execution path is empty
+    if transitions:
+        final_node=transitions[-1]['dst']
+    else:
+        final_node=initial_node
+        
     path={'transitions':transitions, 'initial_node':initial_node, 'final_node':final_node}
     return end_state,cfg,path
 
@@ -128,12 +143,13 @@ def compress(path):
         transitions_merged_str = transitions_merged_str.replace(sequence, '%s '%repetition[0])
     # recreate the compressed execution path
     tmp = []
-    for transition in transitions_merged_str.strip().split(' '):
-        jumpkind,dst,ret = transition.split(separator)
-        tmp.append({
-            'jumpkind': jumpkind, 
-            'dst': dst, 
-            'ret': ret})
+    if transitions_merged_str.strip(): # Check if not empty
+        for transition in transitions_merged_str.strip().split(' '):
+            jumpkind,dst,ret = transition.split(separator)
+            tmp.append({
+                'jumpkind': jumpkind, 
+                'dst': dst, 
+                'ret': ret})
 
     sequence_lengths       = [] # list of sequence lengths
     sequence_repetitions   = [] # list of sequence repetitions
@@ -218,6 +234,11 @@ def valid_execution_path(execution_path, adjlist): # checks if the execution pat
     state = execution_path['initial_node']
     for transition in execution_path['transitions']:
         # print('transition:', transition)
+        # Handle cases where adjlist might be missing a node from the path
+        if str(state) not in adjlist:
+            print(f"State {state} not in adjacency list.        uming it's a valid end state.")
+            return str(state) == str(execution_path['final_node'])
+            
         legal_destinations = adjlist[str(state)]
         if transition['dst'] in legal_destinations:
             state = transition['dst']
@@ -257,6 +278,18 @@ def run(application_foldername):
     compile(c_filenames, out_file) # compile the application using GCC
 
     proj = angr.Project(out_file, load_options={'auto_load_libs': False}) # load the compiled application
+    
+    # Find main and set proj.entry ---
+    main_addr = proj.loader.find_symbol('main').rebased_addr
+    if main_addr is None:
+        print("[-] Could not find 'main' symbol.")
+        exit(1)
+    
+    # Manually override the project's entry point to 'main'.
+    # This will be used by CFGFast and entry_state.
+    proj.entry = main_addr
+   
+
     cfg  = get_cfg(proj) # extract CFG
     end_state, cfg, path = get_execution_path(proj, cfg) # get example execution path
 
