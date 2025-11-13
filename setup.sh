@@ -10,7 +10,7 @@ sudo apt-get install -y \
 pip3 install angr
 
 git config --global url."https://".insteadOf git:// \
-    && git clone https://github.com/akosba/jsnark \
+    && git clone https://github.com/Serhan-R/jsnark \
     && cd jsnark \
     && git submodule init && git submodule update \
     && cd libsnark \
