@@ -19,3 +19,7 @@ jsnark/*
 /bin/*
 /circuits/*
 proof_file
+keys\verification_key.bin
+keys\proving_key.bin
+proof\primary_input.bin
+proof\proof.bin
