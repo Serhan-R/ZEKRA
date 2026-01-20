@@ -35,6 +35,134 @@ public class zekra extends CircuitGenerator {
   public zekra() {
     super("zekra");
     __generateCircuit();
+    this.__evaluateSampleRun(new SampleRun("Sample_Run1", true) {
+      public void pre() {
+        String line;
+        int i = 0;
+        try {
+          BufferedReader br = new BufferedReader(new FileReader(inputPathPrefix + "in_encoded_adjlist"));
+          while ((line = br.readLine()) != null) {
+            ADJLIST[i].mapValue(new BigInteger(line, 10),
+                CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            i = i + 1;
+          }
+
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_translator"));
+          i = 0;
+          while ((line = br.readLine()) != null) {
+            TRANSLATOR[i].mapValue(new BigInteger(line, 10),
+                CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            i = i + 1;
+          }
+
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_recorded_path"));
+          i = 0;
+          while ((line = br.readLine()) != null) {
+            String[] transition = line.split(" ");
+            BigInteger jmpkind = new BigInteger(transition[0], 10);
+            BigInteger destAddr = new BigInteger(transition[1], 10);
+            BigInteger retAddr = new BigInteger(transition[2], 10);
+            EXECUTION_PATH[i][0].mapValue(jmpkind,
+                CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            EXECUTION_PATH[i][1].mapValue(destAddr,
+                CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            EXECUTION_PATH[i][2].mapValue(retAddr,
+                CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            i = i + 1;
+          }
+
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_numified_path"));
+          i = 0;
+          while ((line = br.readLine()) != null) {
+            String[] transition = line.split(" ");
+            BigInteger destLabel = new BigInteger(transition[0], 10);
+            BigInteger retLabel = new BigInteger(transition[1], 10);
+            NUMIFIED_EXECUTION_PATH[i][0].mapValue(destLabel,
+                CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            NUMIFIED_EXECUTION_PATH[i][1].mapValue(retLabel,
+                CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            dest[i].mapValue(destLabel, CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            i = i + 1;
+          }
+
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_initial_node"));
+          initialNode.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_final_node"));
+          finalNode.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_nonce_verifier"));
+          nonceVerifier.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_nonce_path"));
+          noncePath.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_nonce_adjlist"));
+          nonceAdjlist.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_nonce_translator"));
+          nonceTranslator.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_encoded_adjlist_digest"));
+          adjListDigest.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_recorded_path_digest"));
+          executionPathDigest.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+          br = new BufferedReader(new FileReader(inputPathPrefix + "in_translator_digest"));
+          translatorDigest.mapValue(new BigInteger(br.readLine(), 10),
+              CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+
+          // create hints for verifying that the translation was done correctly inside the
+          // circuit
+          for (int j = 0; j < EXECUTION_PATH_SIZE; j++) {
+            // if destination targets the empty move
+            if (EXECUTION_PATH[j][1]
+                .getValueFromEvaluator(CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator())
+                .equals(BigInteger.valueOf(EMPTY_DEST_ADDR))) {
+              TRANSLATION_HINTS[j][0].mapValue(BigInteger.valueOf(ADJLIST_SIZE),
+                  CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            } else {
+              for (int k = 0; k < TRANSLATOR.length; k++) {
+                if (TRANSLATOR[k]
+                    .getValueFromEvaluator(CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator())
+                    .equals(EXECUTION_PATH[j][1].getValueFromEvaluator(
+                        CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator()))) {
+                  TRANSLATION_HINTS[j][0].mapValue(BigInteger.valueOf(k),
+                      CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+                  break;
+                }
+              }
+            }
+            // if return targets the empty move
+            if (EXECUTION_PATH[j][2]
+                .getValueFromEvaluator(CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator())
+                .equals(BigInteger.valueOf(EMPTY_DEST_ADDR))) {
+              TRANSLATION_HINTS[j][1].mapValue(BigInteger.valueOf(ADJLIST_SIZE),
+                  CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+            } else {
+              for (int k = 0; k < TRANSLATOR.length; k++) {
+                if (TRANSLATOR[k]
+                    .getValueFromEvaluator(CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator())
+                    .equals(EXECUTION_PATH[j][2].getValueFromEvaluator(
+                        CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator()))) {
+                  TRANSLATION_HINTS[j][1].mapValue(BigInteger.valueOf(k),
+                      CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
+                  break;
+                }
+              }
+            }
+          }
+        } catch (Exception ex) {
+          System.out.println(ex.getMessage().toString());
+        }
+      }
+
+      public void post() {
+      }
+
+    });
+
   }
 
 
