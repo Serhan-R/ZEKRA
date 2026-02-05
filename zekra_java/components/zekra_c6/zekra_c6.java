@@ -60,7 +60,7 @@ public class zekra_c6 extends CircuitGenerator {
   private UnsignedInteger shadowStackTop;
   private SmartMemory<FieldElement> shadowStackMem;
 
-  private static int EXECUTION_PATH_SIZE = 30;
+  private static int EXECUTION_PATH_SIZE = 500;
   private static int SHADOWSTACK_DEPTH = 15;
   @Override
   public void __defineInputs() {
@@ -250,7 +250,7 @@ public class zekra_c6 extends CircuitGenerator {
     return data;
   }
   private void push(FieldElement data) {
-    CircuitGenerator.__getActiveCircuitGenerator().__addOneAssertion(shadowStackTop.isNotEqualTo(UnsignedInteger.instantiateFrom(11, SHADOWSTACK_DEPTH)).getWire());
+    CircuitGenerator.__getActiveCircuitGenerator().__addOneAssertion(shadowStackTop.isNotEqualTo(UnsignedInteger.instantiateFrom(10, SHADOWSTACK_DEPTH)).getWire());
     shadowStackMem.write(shadowStackTop, data);
     shadowStackTop.assign(shadowStackTop.add(UnsignedInteger.instantiateFrom(1, 1)), 4);
   }

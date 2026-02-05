@@ -17,7 +17,7 @@ from angr.knowledge_plugins.cfg import CFGNode
 from circuit_input_formatter import format_adjlist, encode_adjlist
 
 def compile(c_filenames, out_file):
-    cmd = ['gcc', '-o', out_file]
+    cmd = ['x86_64-linux-gnu-gcc', '-o', out_file]
     cmd.extend(c_filenames)
     cmd.extend(['-Os', '-g0', '-lm', '-fno-optimize-sibling-calls'])
     print(' '.join(cmd))

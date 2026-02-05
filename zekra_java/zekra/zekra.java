@@ -136,20 +136,20 @@ public class zekra extends CircuitGenerator {
 
 
   public void __init() {
-    inputPathPrefix = "";
+    inputPathPrefix = "./embench-iot-applications/cubic/";
     EMPTY_DEST_ADDR = 0;
     SHADOWSTACK = (FieldElement[]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{SHADOWSTACK_DEPTH}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     ADJLIST = (FieldElement[]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{ADJLIST_SIZE}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     EXECUTION_PATH = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 3}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     NUMIFIED_EXECUTION_PATH = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     TRANSLATOR = (FieldElement[]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{ADJLIST_SIZE + 1}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
-    TRANSLATION_HINTS = (UnsignedInteger[][]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, 11);
+    TRANSLATION_HINTS = (UnsignedInteger[][]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, 10);
     adjListDigest = new FieldElement(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), new BigInteger("0"));
     executionPathDigest = new FieldElement(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), new BigInteger("0"));
     translatorDigest = new FieldElement(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), new BigInteger("0"));
     shadowStackTop = new UnsignedInteger(4, new BigInteger("0"));
-    initialNode = new UnsignedInteger(11, new BigInteger("0"));
-    finalNode = new UnsignedInteger(11, new BigInteger("0"));
+    initialNode = new UnsignedInteger(10, new BigInteger("0"));
+    finalNode = new UnsignedInteger(10, new BigInteger("0"));
     nonceVerifier = new FieldElement(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), new BigInteger("0"));
     noncePath = new FieldElement(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), new BigInteger("0"));
     nonceAdjlist = new FieldElement(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), new BigInteger("0"));
@@ -157,7 +157,7 @@ public class zekra extends CircuitGenerator {
     eAndR1 = (UnsignedInteger[][]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, 8);
     neighborEq = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, ADJLIST_LEVELS * 2}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     neighborExistsProof = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 5}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
-    dest = (UnsignedInteger[]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE}, 11);
+    dest = (UnsignedInteger[]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE}, 10);
   }
 
   public String inputPathPrefix;
@@ -189,16 +189,16 @@ public class zekra extends CircuitGenerator {
   private static int P_BITWIDTH = 254;
   private static int JUMPKIND_BITWIDTH = 2;
   private static int BUCKET_BITWIDTH = 7;
-  private static int ADDR_BITWIDTH = 40;
-  private static int ADJLIST_SIZE = 100;
-  private static int ADJLIST_LEVELS = 10;
-  private static int EXECUTION_PATH_SIZE = 30;
+  private static int ADDR_BITWIDTH = 24;
+  private static int ADJLIST_SIZE = 500;
+  private static int ADJLIST_LEVELS = 15;
+  private static int EXECUTION_PATH_SIZE = 500;
   private static int SHADOWSTACK_DEPTH = 15;
   @Override
   public void __defineInputs() {
     super.__defineInputs();
-    initialNode = UnsignedInteger.createInput(this, 11);
-    finalNode = UnsignedInteger.createInput(this, 11);
+    initialNode = UnsignedInteger.createInput(this, 10);
+    finalNode = UnsignedInteger.createInput(this, 10);
     nonceVerifier = FieldElement.createInput(this, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     adjListDigest = FieldElement.createInput(this, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     executionPathDigest = FieldElement.createInput(this, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
@@ -260,8 +260,8 @@ public class zekra extends CircuitGenerator {
 
 
     eAndR1 = (UnsignedInteger[][]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(eAndR1), 8);
-    dest = (UnsignedInteger[]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(dest), 11);
-    TRANSLATION_HINTS = (UnsignedInteger[][]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(TRANSLATION_HINTS), 11);
+    dest = (UnsignedInteger[]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(dest), 10);
+    TRANSLATION_HINTS = (UnsignedInteger[][]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(TRANSLATION_HINTS), 10);
 
 
 
@@ -405,7 +405,7 @@ public class zekra extends CircuitGenerator {
     // Then proceed to verify forward and back edges using the numified execution path 
 
     // start from the initial node 
-    UnsignedInteger state = initialNode.copy(11);
+    UnsignedInteger state = initialNode.copy(10);
 
     // traverse the execution path 
     for (int i = 0; i < EXECUTION_PATH_SIZE; i++) {
@@ -422,9 +422,9 @@ public class zekra extends CircuitGenerator {
         if (c_h0jc0qc) {
           if (bit_h0jc0qc.getConstantValue()) {
 
-            UnsignedInteger uintDestNode = dest[i].copy(11);
+            UnsignedInteger uintDestNode = dest[i].copy(10);
             destNode.forceEqual(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), uintDestNode));
-            UnsignedInteger bucket = uintDestNode.div(UnsignedInteger.instantiateFrom(4, 8)).copy(11);
+            UnsignedInteger bucket = uintDestNode.div(UnsignedInteger.instantiateFrom(4, 8)).copy(10);
             UnsignedInteger pos = UnsignedInteger.instantiateFrom(3, uintDestNode.mod(UnsignedInteger.instantiateFrom(4, 8))).copy(3);
 
             // retrieve the neighbour list of the current node 
@@ -468,7 +468,7 @@ public class zekra extends CircuitGenerator {
             destNodeExists.forceEqual(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), 0));
 
             // update position in the CFG 
-            state.assign(uintDestNode, 11);
+            state.assign(uintDestNode, 10);
           } else {
 
           }
@@ -476,9 +476,9 @@ public class zekra extends CircuitGenerator {
           ConditionalScopeTracker.pushMain();
           ConditionalScopeTracker.push(bit_h0jc0qc);
 
-          UnsignedInteger uintDestNode = dest[i].copy(11);
+          UnsignedInteger uintDestNode = dest[i].copy(10);
           destNode.forceEqual(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), uintDestNode));
-          UnsignedInteger bucket = uintDestNode.div(UnsignedInteger.instantiateFrom(4, 8)).copy(11);
+          UnsignedInteger bucket = uintDestNode.div(UnsignedInteger.instantiateFrom(4, 8)).copy(10);
           UnsignedInteger pos = UnsignedInteger.instantiateFrom(3, uintDestNode.mod(UnsignedInteger.instantiateFrom(4, 8))).copy(3);
 
           // retrieve the neighbour list of the current node 
@@ -522,7 +522,7 @@ public class zekra extends CircuitGenerator {
           destNodeExists.forceEqual(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), 0));
 
           // update position in the CFG 
-          state.assign(uintDestNode, 11);
+          state.assign(uintDestNode, 10);
 
           ConditionalScopeTracker.pop();
 
@@ -716,7 +716,7 @@ public class zekra extends CircuitGenerator {
     return data;
   }
   private void push(FieldElement data) {
-    CircuitGenerator.__getActiveCircuitGenerator().__addOneAssertion(shadowStackTop.isNotEqualTo(UnsignedInteger.instantiateFrom(11, SHADOWSTACK_DEPTH)).getWire());
+    CircuitGenerator.__getActiveCircuitGenerator().__addOneAssertion(shadowStackTop.isNotEqualTo(UnsignedInteger.instantiateFrom(10, SHADOWSTACK_DEPTH)).getWire());
     shadowStackMem.write(shadowStackTop, data);
     shadowStackTop.assign(shadowStackTop.add(UnsignedInteger.instantiateFrom(1, 1)), 4);
   }

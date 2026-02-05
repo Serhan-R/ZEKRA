@@ -58,8 +58,8 @@ public class zekra_c2 extends CircuitGenerator {
 
   private static int P_BITWIDTH = 254;
   private static int JUMPKIND_BITWIDTH = 2;
-  private static int ADDR_BITWIDTH = 40;
-  private static int EXECUTION_PATH_SIZE = 30;
+  private static int ADDR_BITWIDTH = 24;
+  private static int EXECUTION_PATH_SIZE = 500;
   @Override
   public void __defineInputs() {
     super.__defineInputs();

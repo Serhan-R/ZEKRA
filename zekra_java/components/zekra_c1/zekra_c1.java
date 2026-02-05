@@ -53,8 +53,8 @@ public class zekra_c1 extends CircuitGenerator {
 
   private static int P_BITWIDTH = 254;
   private static int BUCKET_BITWIDTH = 7;
-  private static int ADJLIST_SIZE = 100;
-  private static int ADJLIST_LEVELS = 10;
+  private static int ADJLIST_SIZE = 500;
+  private static int ADJLIST_LEVELS = 15;
   @Override
   public void __defineInputs() {
     super.__defineInputs();

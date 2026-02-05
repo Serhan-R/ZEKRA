@@ -67,12 +67,12 @@ public class zekra_c5 extends CircuitGenerator {
     ADJLIST = (FieldElement[]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{ADJLIST_SIZE}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     EXECUTION_PATH = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 3}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     NUMIFIED_EXECUTION_PATH = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
-    initialNode = new UnsignedInteger(11, new BigInteger("0"));
-    finalNode = new UnsignedInteger(11, new BigInteger("0"));
+    initialNode = new UnsignedInteger(10, new BigInteger("0"));
+    finalNode = new UnsignedInteger(10, new BigInteger("0"));
     eAndR1 = (UnsignedInteger[][]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, 8);
     neighborEq = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, ADJLIST_LEVELS * 2}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     neighborExistsProof = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 5}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
-    dest = (UnsignedInteger[]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE}, 11);
+    dest = (UnsignedInteger[]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE}, 10);
   }
 
   private FieldElement[] ADJLIST;
@@ -87,14 +87,14 @@ public class zekra_c5 extends CircuitGenerator {
   private SmartMemory<FieldElement> adjListMem;
 
   private static int BUCKET_BITWIDTH = 7;
-  private static int ADJLIST_SIZE = 100;
-  private static int ADJLIST_LEVELS = 10;
-  private static int EXECUTION_PATH_SIZE = 30;
+  private static int ADJLIST_SIZE = 500;
+  private static int ADJLIST_LEVELS = 15;
+  private static int EXECUTION_PATH_SIZE = 500;
   @Override
   public void __defineInputs() {
     super.__defineInputs();
-    initialNode = UnsignedInteger.createInput(this, 11);
-    finalNode = UnsignedInteger.createInput(this, 11);
+    initialNode = UnsignedInteger.createInput(this, 10);
+    finalNode = UnsignedInteger.createInput(this, 10);
 
 
 
@@ -148,7 +148,7 @@ public class zekra_c5 extends CircuitGenerator {
 
 
     eAndR1 = (UnsignedInteger[][]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(eAndR1), 8);
-    dest = (UnsignedInteger[]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(dest), 11);
+    dest = (UnsignedInteger[]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(dest), 10);
 
 
 
@@ -170,7 +170,7 @@ public class zekra_c5 extends CircuitGenerator {
     // Then proceed to verify forward and back edges using the numified execution path 
 
     // start from the initial node 
-    UnsignedInteger state = initialNode.copy(11);
+    UnsignedInteger state = initialNode.copy(10);
 
     // traverse the execution path 
     for (int i = 0; i < EXECUTION_PATH_SIZE; i++) {
@@ -186,9 +186,9 @@ public class zekra_c5 extends CircuitGenerator {
         if (c_g0k0jb) {
           if (bit_g0k0jb.getConstantValue()) {
 
-            UnsignedInteger uintDestNode = dest[i].copy(11);
+            UnsignedInteger uintDestNode = dest[i].copy(10);
             destNode.forceEqual(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), uintDestNode));
-            UnsignedInteger bucket = uintDestNode.div(UnsignedInteger.instantiateFrom(4, 8)).copy(11);
+            UnsignedInteger bucket = uintDestNode.div(UnsignedInteger.instantiateFrom(4, 8)).copy(10);
             UnsignedInteger pos = UnsignedInteger.instantiateFrom(3, uintDestNode.mod(UnsignedInteger.instantiateFrom(4, 8))).copy(3);
 
             // retrieve the neighbour list of the current node 
@@ -232,7 +232,7 @@ public class zekra_c5 extends CircuitGenerator {
             destNodeExists.forceEqual(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), 0));
 
             // update position in the CFG 
-            state.assign(uintDestNode, 11);
+            state.assign(uintDestNode, 10);
           } else {
 
           }
@@ -240,9 +240,9 @@ public class zekra_c5 extends CircuitGenerator {
           ConditionalScopeTracker.pushMain();
           ConditionalScopeTracker.push(bit_g0k0jb);
 
-          UnsignedInteger uintDestNode = dest[i].copy(11);
+          UnsignedInteger uintDestNode = dest[i].copy(10);
           destNode.forceEqual(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), uintDestNode));
-          UnsignedInteger bucket = uintDestNode.div(UnsignedInteger.instantiateFrom(4, 8)).copy(11);
+          UnsignedInteger bucket = uintDestNode.div(UnsignedInteger.instantiateFrom(4, 8)).copy(10);
           UnsignedInteger pos = UnsignedInteger.instantiateFrom(3, uintDestNode.mod(UnsignedInteger.instantiateFrom(4, 8))).copy(3);
 
           // retrieve the neighbour list of the current node 
@@ -286,7 +286,7 @@ public class zekra_c5 extends CircuitGenerator {
           destNodeExists.forceEqual(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), 0));
 
           // update position in the CFG 
-          state.assign(uintDestNode, 11);
+          state.assign(uintDestNode, 10);
 
           ConditionalScopeTracker.pop();
 

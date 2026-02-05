@@ -54,7 +54,7 @@ public class zekra_c4 extends CircuitGenerator {
     EXECUTION_PATH = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 3}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     NUMIFIED_EXECUTION_PATH = (FieldElement[][]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
     TRANSLATOR = (FieldElement[]) FieldElement.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{ADJLIST_SIZE + 1}, new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"));
-    TRANSLATION_HINTS = (UnsignedInteger[][]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, 11);
+    TRANSLATION_HINTS = (UnsignedInteger[][]) UnsignedInteger.createZeroArray(CircuitGenerator.__getActiveCircuitGenerator(), new int[]{EXECUTION_PATH_SIZE, 2}, 10);
   }
 
   private FieldElement[][] EXECUTION_PATH;
@@ -63,8 +63,8 @@ public class zekra_c4 extends CircuitGenerator {
   private UnsignedInteger[][] TRANSLATION_HINTS;
   private SmartMemory<FieldElement> translatorMem;
 
-  private static int ADJLIST_SIZE = 100;
-  private static int EXECUTION_PATH_SIZE = 30;
+  private static int ADJLIST_SIZE = 500;
+  private static int EXECUTION_PATH_SIZE = 500;
   @Override
   public void __defineInputs() {
     super.__defineInputs();
@@ -118,7 +118,7 @@ public class zekra_c4 extends CircuitGenerator {
 
 
 
-    TRANSLATION_HINTS = (UnsignedInteger[][]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(TRANSLATION_HINTS), 11);
+    TRANSLATION_HINTS = (UnsignedInteger[][]) UnsignedInteger.createWitnessArray(CircuitGenerator.__getActiveCircuitGenerator(), Util.getArrayDimensions(TRANSLATION_HINTS), 10);
 
 
 

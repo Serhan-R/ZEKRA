@@ -1,11 +1,9 @@
-initial_node=0 final_node=41
-call 1 126
-call 5 146
-call 6 7
-ret 7
-call 24 86
-call 23 25
-jump 114
-jump 68
-jump 66
-call 41 67
+initial_node=0 final_node=18
+call 1 2
+ret 2
+call 42 85
+call 41 43
+jump 119
+jump 74
+jump 72
+call 18 73
