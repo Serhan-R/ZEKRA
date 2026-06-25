@@ -38,6 +38,20 @@ def _addr_in_binary(proj, addr):
             return True
     return False
 
+def _addr_is_executable(proj, addr):
+    """Check if an address falls within an *executable* segment.
+    Unlike _addr_in_binary, this excludes .got / .bss / .data even though
+    they are within the binary's mapped range."""
+    for obj in proj.loader.all_objects:
+        if obj.min_addr <= addr <= obj.max_addr:
+            for seg in obj.segments:
+                if seg.vaddr <= addr < seg.vaddr + seg.memsize:
+                    return seg.is_executable
+            # Object has no segment info (e.g. angr's ExternObject for
+            # SimProcedure stubs at 0x500000) — treat as executable
+            return True
+    return False
+
 def get_execution_path(proj, cfg, main_addr):
     """
     Get execution path via symbolic execution.
@@ -102,18 +116,28 @@ def get_execution_path(proj, cfg, main_addr):
                 if isinstance(target, int):
                     dst_addr = target
                 elif state.solver.symbolic(target):
-                    # If symbolic, try to get a concrete solution
-                    try:
-                        dst_addr = state.solver.eval(target)
-                    except:
-                        end_state = 'symbolic jump target'
-                        break
+                    # First check if CFGFast already resolved this jump
+                    src_addr = state.addr
+                    cfg_nodes = cfg.model.get_all_nodes(src_addr)
+                    resolved = False
+                    if cfg_nodes:
+                        successors = list(cfg.graph.successors(cfg_nodes[0]))
+                        if len(successors) == 1:
+                            # CFGFast resolved it to exactly one target, use that
+                            dst_addr = successors[0].addr
+                            resolved = True
+                    if not resolved:
+                        try:
+                            dst_addr = state.solver.eval(target)
+                        except:
+                            end_state = 'symbolic jump target (unresolvable)'
+                            break
                 else:
                     dst_addr = state.solver.eval(target)
                 
                 # When main() returns, the CRT return address is typically 0x1 or
                 # some other address outside the binary. Detect this and stop cleanly.
-                if not _addr_in_binary(proj, dst_addr):
+                if not _addr_is_executable(proj, dst_addr):
                     if jumpkind == 'Ijk_Ret':
                         end_state = f'clean exit (main returned to {hex(dst_addr)})'
                         print(f"[+] Detected clean program exit: main() returned to {hex(dst_addr)} (outside binary)")
