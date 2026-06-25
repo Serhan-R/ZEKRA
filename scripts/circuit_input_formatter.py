@@ -1,11 +1,16 @@
 #!/usr/bin/python3
 #################################
 ## Author: Heini Bergsson Debes
+## Modified: pruned CFG support via --pruned flag
 #################################
 # Purpose is to:
 # (1) encode the adjacency list (optionally padded)
 # (2) get the hash of the encoded adjacency list, translator, and recorded execution path (after padding)
 # (3) format inputs for ZEKRA circuit
+#
+# New flag: --pruned
+#   Reads adjlist_pruned, numified_adjlist_pruned, translator_pruned,
+#   and numified_path_pruned instead of the default files.
 
 import sys, getopt, math
 from poseidon.poseidon_hash import poseidon_hash, p
@@ -17,11 +22,15 @@ LABEL_BITWIDTH=None
 BUCKET_BITWIDTH=None
 ADDR_BITWIDTH=None
 ADJLIST_LEVELS=None
+
+# Default filenames (overridden by --pruned)
 ADJLIST_FILENAME='adjlist'
 NUMIFIED_ADJLIST_FILENAME='numified_adjlist'
 NUMIFIED_PATH_FILENAME='numified_path'
 RECORDED_PATH_FILENAME='recorded_path'
 TRANSLATOR_FILENAME='translator'
+
+USE_PRUNED=False
 PAD_ADJLIST=None
 PAD_PATH=None
 
@@ -240,15 +249,23 @@ def hash_path(path, nonce_verifier, nonce_path):
     return hash(path_padded)
 
 def main(in_dir, out_dir, nonce_verifier, nonce_path, nonce_translator, nonce_adjlist):
-    numified_adjlist_filename_in = in_dir+NUMIFIED_ADJLIST_FILENAME
-    numified_path_filename_in    = in_dir+NUMIFIED_PATH_FILENAME
-    recorded_path_filename_in    = in_dir+RECORDED_PATH_FILENAME
-    translator_filename_in       = in_dir+TRANSLATOR_FILENAME
+    # ── resolve filenames based on --pruned flag ──────────────────────────────
+    adjlist_filename_in        = in_dir + ADJLIST_FILENAME
+    numified_adjlist_filename_in = in_dir + NUMIFIED_ADJLIST_FILENAME
+    numified_path_filename_in  = in_dir + NUMIFIED_PATH_FILENAME
+    recorded_path_filename_in  = in_dir + RECORDED_PATH_FILENAME   # never changes
+    translator_filename_in     = in_dir + TRANSLATOR_FILENAME
 
+    if USE_PRUNED:
+        print('[formatter] Using PRUNED adjacency list and path files')
+
+    # Output filenames are ALWAYS the standard names that the Java circuit
+    # expects — regardless of whether --pruned is used. Only the INPUT
+    # filenames change when --pruned is set.
     encoded_adjlist_filename_out        = out_dir+'in_encoded_adjlist'
-    translator_filename_out             = out_dir+'in_%s'%TRANSLATOR_FILENAME
-    recorded_path_filename_out          = out_dir+'in_%s'%RECORDED_PATH_FILENAME
-    numified_path_filename_out          = out_dir+'in_%s'%NUMIFIED_PATH_FILENAME
+    translator_filename_out             = out_dir+'in_translator'
+    recorded_path_filename_out          = out_dir+'in_recorded_path'
+    numified_path_filename_out          = out_dir+'in_numified_path'
     initial_node_filename_out           = out_dir+'in_initial_node'
     final_node_filename_out             = out_dir+'in_final_node'
     nonce_verifier_filename_out         = out_dir+'in_nonce_verifier'
@@ -256,8 +273,8 @@ def main(in_dir, out_dir, nonce_verifier, nonce_path, nonce_translator, nonce_ad
     nonce_translator_filename_out       = out_dir+'in_nonce_translator'
     nonce_adjlist_filename_out          = out_dir+'in_nonce_adjlist'
     encoded_adjlist_digest_filename_out = out_dir+'in_encoded_adjlist_digest'
-    recorded_path_digest_filename_out   = out_dir+'in_%s_digest'%RECORDED_PATH_FILENAME
-    translator_digest_filename_out      = out_dir+'in_%s_digest'%TRANSLATOR_FILENAME
+    recorded_path_digest_filename_out   = out_dir+'in_recorded_path_digest'
+    translator_digest_filename_out      = out_dir+'in_translator_digest'
 
     #############################################################
     ## Create circuit input files for the encoded adjacency list
@@ -303,6 +320,7 @@ def main(in_dir, out_dir, nonce_verifier, nonce_path, nonce_translator, nonce_ad
 
     #############################################################
     ## Create circuit input files for the numified execution path
+    # For pruned mode, numified_path uses new labels but empty_move_dst is len(adjlist) which equals PAD_ADJLIST
     numified_path=read_path(numified_path_filename_in, PAD_PATH, len(adjlist))
 
     output='The numified execution path contains %s transitions'%len(numified_path['transitions'])
@@ -340,6 +358,7 @@ def main(in_dir, out_dir, nonce_verifier, nonce_path, nonce_translator, nonce_ad
 
     #############################################################
     ## Create circuit input files for the recorded execution path
+    # recorded_path always uses the original file (raw hex addresses never change)
     recorded_path=read_path(recorded_path_filename_in, PAD_PATH, str(hex(EMPTY_DEST_ADDR)))
 
     output='The recorded execution path contains %s transitions'%len(recorded_path['transitions'])
@@ -409,18 +428,21 @@ def usage():
     print('Usage: %s -a <dir> [options]'%sys.argv[0])
     print('Options:')
     print('  -h                       This help message')
-    print('  -a <dir>                 Path to specific target application\'s directory containing the \'adjlist\', \'numified_adjlist\', \'translator\', \'recorded_path\', and \'numified_path\' files')
-    print('  --pad-adjlist-to <len>   Pad the adjlist and translator with zeros (empty entries) until their length is <len> (default is to not pad)')
-    print('  --pad-path-to <len>      Pad the execution path with zeros (empty moves) until its length is <len> (default is to not pad)')
-    print('  --adjlist-levels <num>   Use <num> levels (pairs of bucket-rems) for encoding the adjacency list. Note that this primarily affects the adjacency list compression which is done prior to hashing to reduce the number of calls to Poseidon (default is to use the minimum levels necessary to maximize compression and minimize the size of the generated circuit)')
-    print('  --output-dir <dir>       Store the circuit input files in <dir> (default is to store the files in the same directory as the targeted application)')
-    print('  --nonce-verifier <num>   Verifier\'s nonce to hash with the execution path (default 0)')
-    print('  --nonce-path <num>       Blinding factor (nonce) to hash with the execution path (default 0)')
-    print('  --nonce-translator <num> Blinding factor (nonce) to hash with the address-to-label translator (default 0)')
-    print('  --nonce-adjlist <num>    Blinding factor (nonce) to hash with the encoded adjacency list (default 0)')
-    print('  --label-bitwidth <num>   Use <num> bits to represent each numified destination address when compressing/hashing the numified execution path (default is to use the minimum number of bits as determined by the size of the adjacency list).')
-    print('  --bucket-bitwidth <num>  Use <num> bits to represent each quotient (bucket) in the adjacency list encoding (default is to use the miminum number of bits as determined by the length of the adjacency list).')
-    print('  --address-bitwidth <num> Use <num> bits to represent each destination address when compressing/hashing the raw/recorded execution path (default is to use the minimum number of bits as determined by the recorded execution path provided as input).')
+    print('  -a <dir>                 Path to specific target application\'s directory')
+    print('  --pruned                 Use pruned CFG files (run prune_cfg.py first)')
+    print('                           Reads adjlist_pruned, numified_adjlist_pruned,')
+    print('                           translator_pruned, numified_path_pruned')
+    print('  --pad-adjlist-to <len>   Pad the adjlist and translator to <len> nodes')
+    print('  --pad-path-to <len>      Pad the execution path to <len> transitions')
+    print('  --adjlist-levels <num>   Number of levels for adjacency list encoding')
+    print('  --output-dir <dir>       Store circuit input files in <dir>')
+    print('  --nonce-verifier <num>   Verifier nonce (default 0)')
+    print('  --nonce-path <num>       Path nonce (default 0)')
+    print('  --nonce-translator <num> Translator nonce (default 0)')
+    print('  --nonce-adjlist <num>    Adjacency list nonce (default 0)')
+    print('  --label-bitwidth <num>   Bits per numified label')
+    print('  --bucket-bitwidth <num>  Bits per adjacency list bucket')
+    print('  --address-bitwidth <num> Bits per raw address')
 
 if __name__ == '__main__':
     in_dir  = None
@@ -430,7 +452,7 @@ if __name__ == '__main__':
     nonce_translator = 0
     nonce_adjlist    = 0
     try:
-        opts,args=getopt.getopt(sys.argv[1:],'ha:',['pad-adjlist-to=','pad-path-to=','adjlist-levels=','output-dir=','nonce-verifier=','nonce-path=','nonce-translator=','nonce-adjlist=','label-bitwidth=','bucket-bitwidth=','address-bitwidth='])
+        opts,args=getopt.getopt(sys.argv[1:],'ha:',['pruned','pad-adjlist-to=','pad-path-to=','adjlist-levels=','output-dir=','nonce-verifier=','nonce-path=','nonce-translator=','nonce-adjlist=','label-bitwidth=','bucket-bitwidth=','address-bitwidth='])
     except getopt.GetoptError as err:
         print(err)
         usage()
@@ -442,6 +464,12 @@ if __name__ == '__main__':
         elif opt=='-a':
             if not arg.endswith('/'): arg=arg+'/'
             in_dir=arg
+        elif opt=='--pruned':
+            USE_PRUNED=True
+            ADJLIST_FILENAME='adjlist_pruned'
+            NUMIFIED_ADJLIST_FILENAME='numified_adjlist_pruned'
+            NUMIFIED_PATH_FILENAME='numified_path_pruned'
+            TRANSLATOR_FILENAME='translator_pruned'
         elif opt=='--pad-adjlist-to':
             PAD_ADJLIST=int(arg)
         elif opt=='--pad-path-to':
@@ -481,6 +509,7 @@ if __name__ == '__main__':
             BUCKET_BITWIDTH=int(arg)
         elif opt=='--address-bitwidth':
             ADDR_BITWIDTH=int(arg)
+            
     if not in_dir:
         print('%s: fatal error: no application input directory specified \n'%sys.argv[0])
         usage()
