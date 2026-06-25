@@ -6,7 +6,7 @@
 # (1) initialize the sizes of the data structures in the ZEKRA circuit
 # (2) compile the high-level ZEKRA program code into the low-level arithmetic circuit (including formatting the circuit inputs) using the xjsnark backend
 
-import sys, getopt, math
+import sys, getopt, math, os
 import subprocess
 
 JUMPKIND_BITWIDTH=2
@@ -33,7 +33,7 @@ def compile(component_dir, component_name, with_poseidon=True):
     # print(' '.join(cmd))
     subprocess.run(cmd, stderr=subprocess.PIPE, check=True)
     cmd = ['java', '-Xmx10g', \
-        '-cp', 'bin:xjsnark_backend.jar', \
+        '-cp', os.pathsep.join(['bin', 'xjsnark_backend.jar']), \
         'xjsnark.%s.%s'%(component_name,component_name)]
     # print(' '.join(cmd))
     output=subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
@@ -99,6 +99,11 @@ def set_val(contents, data_structure, val):
     return contents
 
 def set_input_dir(contents, in_dir):
+    # Java string literals don't allow a bare '\' (only recognized escapes
+    # like \n, \t, \\); a raw Windows path would make javac reject this with
+    # "illegal escape character". '/' is accepted as a path separator by
+    # Java/the JVM on every OS, so normalize before splicing it in.
+    in_dir = in_dir.replace('\\', '/')
     for idx,line in enumerate(contents):
         replace_line=None
         if 'inputPathPrefix =' in line:
@@ -109,6 +114,7 @@ def set_input_dir(contents, in_dir):
     return contents
 
 def set_output_dir(contents, out_dir):
+    out_dir = out_dir.replace('\\', '/')  # same reason as set_input_dir() above
     for idx,line in enumerate(contents):
         replace_line=None
         if 'Config.outputFilesPath =' in line:
