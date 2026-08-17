@@ -6,8 +6,24 @@
 # (1) initialize the sizes of the data structures in the ZEKRA circuit
 # (2) compile the high-level ZEKRA program code into the low-level arithmetic circuit (including formatting the circuit inputs) using the xjsnark backend
 
-import sys, getopt, math, os
+import sys, getopt, math, os, shutil
 import subprocess
+
+
+def _java_from_javac():
+    """Return the java executable co-located with javac (following symlinks so
+    we reach the actual JDK bin directory). When javac is Java 11 but the
+    system java resolves to Java 8, this ensures both compile AND run use the
+    same JDK version -- avoiding UnsupportedClassVersionError (class file v55
+    compiled by Java 11 rejected by a Java 8 runtime)."""
+    javac = shutil.which('javac')
+    if javac:
+        # Follow symlinks (e.g. /usr/bin/javac → .../java-11.../bin/javac)
+        real = os.path.realpath(javac)
+        candidate = os.path.join(os.path.dirname(real), 'java')
+        if os.path.isfile(candidate):
+            return candidate
+    return 'java'  # fall back to whatever is on PATH
 
 JUMPKIND_BITWIDTH=2
 LABEL_BITWIDTH=None
@@ -26,13 +42,14 @@ COMPUTE_WORKLOAD_DISTRIBUTION=False
 COMPONENTS_DIR='./components'
 
 def compile(component_dir, component_name, with_poseidon=True):
+    java = _java_from_javac()
     cmd = ['javac', '-d', 'bin', \
         '-cp', 'xjsnark_backend.jar', \
         '%s/%s.java'%(component_dir,component_name)]
     if with_poseidon: cmd.extend(['%s/PoseidonHash.java'%(component_dir)])
     # print(' '.join(cmd))
     subprocess.run(cmd, stderr=subprocess.PIPE, check=True)
-    cmd = ['java', '-Xmx10g', \
+    cmd = [java, '-Xmx10g', \
         '-cp', os.pathsep.join(['bin', 'xjsnark_backend.jar']), \
         'xjsnark.%s.%s'%(component_name,component_name)]
     # print(' '.join(cmd))
