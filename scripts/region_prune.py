@@ -5,7 +5,7 @@ ZEKRA CFG pruner
 Reads the files already written by extractor.py and produces a pruned
 adjacency list, removing nodes that are irrelevant to the recorded path.
 
-Four pruning strategies (--mode):
+Five pruning strategies (--mode):
 
   path          Keep only the exact nodes on the recorded execution path.
                 Produces the smallest possible graph; good for circuit-size
@@ -28,6 +28,29 @@ Four pruning strategies (--mode):
                 visits in the execution path are concatenated into one path
                 (option B): virtual_entry → visit1 → virtual_exit →
                 virtual_entry → visit2 → ...
+
+  region_bidir  Like region, the ROI is still one or more user-specified
+                functions/address ranges. Unlike region, the pruned CFG is
+                NOT restricted to only the ROI's own nodes -- instead it runs
+                a bidirectional reachability search using the ROI as the
+                pivot in both directions (start→ROI and ROI→end) and keeps
+                the union of the ROI with both slices. No virtual entry/exit
+                nodes are needed -- the program's real initial/final nodes
+                stay in the graph, so the recorded path is preserved as-is.
+                Produces a larger, more "meaningful" CFG than region (many
+                real branches survive), while still being anchored on the
+                same ROI detection step.
+
+  region_trace  region_bidir augmented with the dynamic execution trace.
+                Runs the same ROI-anchored bidirectional static slice as
+                region_bidir, then unions in every unique node the execution
+                actually visited. Any node that bidir would have pruned but
+                that the trace visited is added back. This eliminates the
+                two failure modes that region_bidir works around with a
+                sentinel: translator failures (return destination not in
+                pruned graph) and shadow stack imbalances (callee pruned
+                so its RET disappears). Requires --function or --addr-range
+                to identify the ROI, same as region_bidir.
 
 Inputs  (from extractor.py output):
   <app_dir>/adjlist        — hex-address adjacency list (full CFG)
@@ -60,6 +83,10 @@ Usage:
   # Region mode — combine both
   python3 prune_cfg.py -a embench-iot-applications/picojpeg --mode region \\
       --function benchmark_body --addr-range "0x401200-0x401800"
+
+  # Region-bidir mode — same ROI selection, richer merged CFG
+  python3 prune_cfg.py -a embench-iot-applications/picojpeg --mode region_bidir \\
+      --function "pjpeg_decode_mcu,pjpeg_decode_init"
 """
 
 import os, sys, getopt, subprocess, shutil
@@ -322,6 +349,158 @@ def prune_bidir(G: nx.DiGraph, path_info: dict, **kwargs) -> tuple:
     return G.subgraph(keep).copy(), path_info
 
 
+def _reachable_from_any(G: nx.DiGraph, sources: set) -> set:
+    """
+    Multi-source forward reachability: nodes reachable from ANY node in
+    `sources`, inclusive of `sources` itself. Equivalent to
+    union(nx.descendants(G, s) for s in sources) | sources, but done as a
+    single BFS instead of one BFS per source.
+    """
+    from collections import deque
+    seen  = {s for s in sources if s in G}
+    queue = deque(seen)
+    while queue:
+        u = queue.popleft()
+        for v in G.successors(u):
+            if v not in seen:
+                seen.add(v)
+                queue.append(v)
+    return seen
+
+
+def _reachable_to_any(G: nx.DiGraph, sinks: set) -> set:
+    """
+    Multi-source backward reachability: nodes that can reach ANY node in
+    `sinks`, inclusive of `sinks` itself. Equivalent to
+    union(nx.ancestors(G, s) for s in sinks) | sinks, but done as a single
+    BFS (over predecessors) instead of one BFS per sink.
+    """
+    from collections import deque
+    seen  = {s for s in sinks if s in G}
+    queue = deque(seen)
+    while queue:
+        u = queue.popleft()
+        for v in G.predecessors(u):
+            if v not in seen:
+                seen.add(v)
+                queue.append(v)
+    return seen
+
+
+def _find_roi_segments(states: list, in_region_fn) -> list:
+    """
+    Contiguous runs of in-region states within an execution sequence.
+    Returns a list of (start_idx, end_idx) pairs (inclusive indices into
+    `states`). Used both to detect whether the recorded path ever visits
+    the ROI at all, and (in `region` mode) to drive the path-stitching.
+    """
+    segments  = []
+    in_roi    = False
+    seg_start = None
+    for i, state in enumerate(states):
+        if in_region_fn(state):
+            if not in_roi:
+                seg_start = i
+                in_roi = True
+        else:
+            if in_roi:
+                segments.append((seg_start, i - 1))
+                in_roi = False
+    if in_roi:
+        segments.append((seg_start, len(states) - 1))
+    return segments
+
+
+def prune_region_bidir(G: nx.DiGraph, path_info: dict,
+                       in_region_fn=None, **kwargs) -> tuple:
+    """
+    ROI-anchored bidirectional slice (see module docstring for "region_bidir").
+
+    roi_nodes is computed exactly like `region` (same --function/--addr-range
+    resolution). From there, instead of throwing away every non-ROI node:
+
+      start_to_roi = (forward-reachable from the program's real initial node)
+                    ∩ (backward-reachable INTO the ROI from anywhere)
+      roi_to_end   = (forward-reachable OUT of the ROI to anywhere)
+                    ∩ (backward-reachable from the program's real final node)
+      keep         = roi_nodes ∪ start_to_roi ∪ roi_to_end
+
+    No virtual entry/exit nodes are introduced: `initial`/`final` are real
+    CFG nodes and (by construction) every node the recorded run actually
+    visited lies on a real initial→...→final walk, so it is necessarily an
+    ancestor-or-self of the ROI nodes it walks into and a descendant-or-self
+    of the ROI nodes it walks out of -- i.e. already inside `keep`. That
+    means path_info needs no trimming/re-stitching; it is returned
+    unchanged (mirroring path/forward/bidir), just with a `segments` field
+    added so callers can still detect "ROI never visited" the same way
+    `region` mode's callers already do.
+    """
+    if in_region_fn is None:
+        raise ValueError("--mode region_bidir requires --function or --addr-range")
+
+    roi_nodes = {n for n in G.nodes() if in_region_fn(n)}
+    if not roi_nodes:
+        raise ValueError("No CFG nodes fall within the specified region. "
+                         "Check your address ranges or function names.")
+
+    initial = path_info['initial']
+    final   = path_info['final']
+    if initial not in G:
+        raise ValueError(f"Initial node {hex(initial)} not in CFG graph")
+
+    roi_descendants = _reachable_from_any(G, roi_nodes)  # ROI ∪ its forward reach
+    roi_ancestors   = _reachable_to_any(G, roi_nodes)    # ROI ∪ its backward reach
+
+    forward_from_initial = nx.descendants(G, initial) | {initial}
+    start_to_roi = forward_from_initial & roi_ancestors
+
+    if final in G:
+        backward_from_final = nx.ancestors(G, final) | {final}
+        roi_to_end = roi_descendants & backward_from_final
+    else:
+        print(f"  [!] Final node {hex(final)} not in static CFG — "
+              f"keeping everything forward-reachable from the ROI instead "
+              f"of intersecting with an end-side slice")
+        roi_to_end = roi_descendants
+
+    keep = roi_nodes | start_to_roi | roi_to_end
+
+    # Angr represents "after this call returns, go here" as a fake-return
+    # edge attached to the CALL block (caller side), not to the callee's
+    # RET instruction. This means the bidir slice never sees a path
+    # ROI→ret_addr and evicts those return-address nodes, even though
+    # execution must pass through them after the callee returns.
+    # Fix: explicitly keep every call's ret_addr that is a real CFG node.
+    call_ret_addrs = {
+        ret for (jk, _dst, ret) in path_info.get('transitions', [])
+        if jk == 'call' and ret is not None and ret in G
+    }
+    fake_ret_added = call_ret_addrs - keep
+    if fake_ret_added:
+        print(f"  Fake-ret nodes  : {len(fake_ret_added)} return address(es) "
+              f"added back (angr fake-return edge targets missing from bidir slice)")
+    else:
+        print(f"  Fake-ret nodes  : 0 (all call return addresses already in slice)")
+    keep = keep | call_ret_addrs
+
+    P = G.subgraph(keep).copy()
+
+    # Diagnostic-only: confirms/reports that the recorded path visits the
+    # ROI. No stitching needed (path_info passes through unchanged below).
+    segments = _find_roi_segments(path_info['sequence'], in_region_fn)
+    if not segments:
+        print("  [!] WARNING: execution path never enters the specified region.")
+    print(f"  ROI visits      : {len(segments)} "
+          f"({'→'.join(str(e-s+1)+' steps' for s,e in segments[:3])}"
+          f"{'...' if len(segments)>3 else ''})")
+    print(f"  Start→ROI nodes : {len(start_to_roi)}   "
+          f"ROI→End nodes   : {len(roi_to_end)}")
+
+    new_path_info = dict(path_info)
+    new_path_info['segments'] = segments
+    return P, new_path_info
+
+
 def prune_region(G: nx.DiGraph, path_info: dict,
                  in_region_fn=None, **kwargs) -> tuple:
     """
@@ -367,22 +546,7 @@ def prune_region(G: nx.DiGraph, path_info: dict,
     transitions   = path_info['transitions']
     states        = path_info['sequence']  # states[i] = state before transition i
 
-    # Find ROI segments: contiguous runs of in-region states
-    segments = []
-    in_roi   = False
-    seg_start = None
-
-    for i, state in enumerate(states):
-        if in_region_fn(state):
-            if not in_roi:
-                seg_start = i
-                in_roi = True
-        else:
-            if in_roi:
-                segments.append((seg_start, i - 1))
-                in_roi = False
-    if in_roi:
-        segments.append((seg_start, len(states) - 1))
+    segments = _find_roi_segments(states, in_region_fn)
 
     if not segments:
         print("  [!] WARNING: execution path never enters the specified region.")
@@ -435,11 +599,69 @@ def prune_region(G: nx.DiGraph, path_info: dict,
     return P, new_path_info
 
 
+def prune_region_trace(G: nx.DiGraph, path_info: dict,
+                       in_region_fn=None, **kwargs) -> tuple:
+    """
+    ROI-anchored bidirectional slice augmented with the dynamic execution trace
+    (region_trace mode).
+
+    This is region_bidir with one addition: after computing the static
+    start→ROI→end slice, the unique nodes from the actual execution trace are
+    unioned in. The result is that any node the execution visited but that
+    static reachability missed is added back, while the graph still stays
+    anchored on and sized around the ROI.
+
+    This eliminates the two failure modes caused by region_bidir pruning nodes
+    that appear in the actual execution:
+      - Translator failure: a RET whose destination was pruned out has no entry
+        in the translator. With region_trace, every return destination in the
+        trace is in the graph.
+      - Shadow stack imbalance: a CALL whose callee was pruned loses its
+        matching RET. With region_trace, the callee's blocks are in the graph
+        so every push has a corresponding pop.
+
+    Requires --function or --addr-range to identify the ROI (same as
+    region_bidir).
+    """
+    if in_region_fn is None:
+        raise ValueError("--mode region_trace requires --function or --addr-range")
+
+    # Step 1: run bidir to get the static ROI-anchored slice
+    P_bidir, bidir_path_info = prune_region_bidir(G, path_info,
+                                                   in_region_fn=in_region_fn,
+                                                   **kwargs)
+    bidir_nodes = set(P_bidir.nodes())
+
+    # Step 2: union with all unique nodes from the dynamic trace
+    trace_nodes = {n for n in path_info['path_nodes'] if n in G}
+    keep = bidir_nodes | trace_nodes
+
+    extra = trace_nodes - bidir_nodes
+    if extra:
+        print(f"  Trace-added nodes: {len(extra)} node(s) present in trace "
+              f"but absent from bidir slice — added back to fix shadow stack / "
+              f"translator failures")
+    else:
+        print(f"  Trace-added nodes: 0 (bidir slice already covers full trace)")
+
+    missing_from_cfg = path_info['path_nodes'] - set(G.nodes())
+    if missing_from_cfg:
+        print(f"  [!] {len(missing_from_cfg)} trace node(s) absent from static CFG "
+              f"(angr missed them): "
+              f"{[hex(n) for n in sorted(missing_from_cfg)[:5]]}"
+              f"{'...' if len(missing_from_cfg) > 5 else ''}")
+
+    P = G.subgraph(keep).copy()
+    return P, bidir_path_info
+
+
 STRATEGIES = {
-    'path':    prune_path,
-    'forward': prune_forward,
-    'bidir':   prune_bidir,
-    'region':  prune_region,
+    'path':          prune_path,
+    'forward':       prune_forward,
+    'bidir':         prune_bidir,
+    'region':        prune_region,
+    'region_bidir':  prune_region_bidir,
+    'region_trace':  prune_region_trace,
 }
 
 
@@ -701,9 +923,9 @@ def prune_dir(app_dir: str, mode: str = 'bidir',
     G_full    = read_adjlist(adjlist_file)
     path_info = read_recorded_path(path_file)
 
-    # ── region mode: build in_region_fn ─────────────────────────────────────
+    # ── region / region_bidir modes: build in_region_fn ─────────────────────
     in_region_fn = None
-    if mode == 'region':
+    if mode in ('region', 'region_bidir', 'region_trace'):
         ranges = list(addr_ranges or [])
 
         # Resolve function names via nm
@@ -716,7 +938,7 @@ def prune_dir(app_dir: str, mode: str = 'bidir',
                 ranges.append((start, end))
 
         if not ranges:
-            print("[!] No valid address ranges for region mode. "
+            print(f"[!] No valid address ranges for {mode} mode. "
                   "Use --function or --addr-range."); return
 
         print(f"  Region ranges   : {[(hex(s), hex(e)) for s,e in ranges]}")
@@ -751,10 +973,10 @@ def usage():
     print(f'Usage: {sys.argv[0]} -a <app_dir> | -d <apps_dir> [options]')
     print('  -a <path>                     Single application directory')
     print('  -d <path>                     Directory of multiple application folders')
-    print('  --mode path|forward|bidir|region')
+    print('  --mode path|forward|bidir|region|region_bidir|region_trace')
     print('                                Pruning strategy (default: bidir)')
     print()
-    print('  Region mode options (--mode region):')
+    print('  Region mode options (--mode region | region_bidir):')
     print('  --function <name1,name2,...>  Function names to include in ROI')
     print('                                (requires nm and <app_dir>/main binary)')
     print('  --addr-range <r1,r2,...>      Address ranges, e.g. 0x401200-0x401800')
@@ -792,8 +1014,8 @@ if __name__ == '__main__':
         elif opt == '--addr-range':
             addr_ranges = parse_addr_ranges(arg)
 
-    if mode == 'region' and not func_names and not addr_ranges:
-        print("[!] --mode region requires --function or --addr-range")
+    if mode in ('region', 'region_bidir') and not func_names and not addr_ranges:
+        print(f"[!] --mode {mode} requires --function or --addr-range")
         usage(); sys.exit(2)
 
     if app_dir:
@@ -807,4 +1029,4 @@ if __name__ == '__main__':
                 except Exception as e:
                     print(f'[!] {entry.path}: {e}')
     else:
-        print('No directory specified.'); usage(); sys.exit(2)
+        print('No directory specified.'); usage
