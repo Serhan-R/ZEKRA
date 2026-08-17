@@ -12,6 +12,28 @@ import logging
 from angr.knowledge_plugins.cfg import CFGNode
 from circuit_input_formatter import format_adjlist, encode_adjlist
 
+# Workaround: angr 9.2.213 CFGFast.graph returns a SpillingCFG instance that
+# lacks add_nodes_from, breaking networkx>=3's relabel_nodes / generate_adjlist.
+# After CFGFast.__init__ finishes we convert once to a plain nx.DiGraph and
+# cache it on the model so all subsequent .graph accesses return the same object
+# (important: two independent to_networkx() calls may differ in node order,
+# which would desync the path from the adjlist in generate_label_translator).
+from angr.analyses.cfg.cfg_fast import CFGFast as _CFGFast
+if not getattr(_CFGFast, '_spillingcfg_patch_applied', False):
+    _orig_cfgfast_init = _CFGFast.__init__
+    def _patched_cfgfast_init(self, *args, **kwargs):
+        _orig_cfgfast_init(self, *args, **kwargs)
+        self._cfgfast_construction_done = True
+    def _patched_cfgfast_graph(self):
+        g = self._model.graph
+        if getattr(self, '_cfgfast_construction_done', False) and not isinstance(g, nx.DiGraph):
+            g = g.to_networkx()
+            self._model.graph = g
+        return g
+    _CFGFast.__init__ = _patched_cfgfast_init
+    _CFGFast.graph = property(_patched_cfgfast_graph)
+    _CFGFast._spillingcfg_patch_applied = True
+
 def compile(c_filenames, out_file):
     cmd = ['gcc', '-o', out_file]
     cmd.extend(c_filenames)
