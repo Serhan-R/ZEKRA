@@ -129,11 +129,11 @@ def compute_sizing(app_dir):
     numified_path_path    = os.path.join(app_dir, 'numified_path_pruned')
 
     # numified_adjlist_pruned = 1 dummy line (label 0) + n_pruned real lines.
-    # The circuit additionally needs room for the "empty"/sentinel label
-    # (n_pruned+1), so capacity = n_pruned + 2 = (lines in file) + 1 — this
-    # matches region_prune.write_numified_files()'s own printed
-    # recommendation ("--adjlist-len >= n_pruned+2").
-    adjlist_size = _count_nonempty_lines(numified_adjlist_path) + 1
+    # ADJLIST_SIZE = n_pruned + 1 = number of lines in file (no extra +1).
+    # This aligns ADJLIST_SIZE with the empty_label sentinel used in
+    # numified_path_pruned (region_prune writes empty_label = n_pruned+1),
+    # so all "no destination" sentinels agree on the same value.
+    adjlist_size = _count_nonempty_lines(numified_adjlist_path)
 
     jumpkinds = _read_path_jumpkinds(numified_path_path)
     path_size = len(jumpkinds)
@@ -266,9 +266,10 @@ def compile_pruned_circuit(formatted_input_dir, output_dir, sizing, zekra_copy_d
 
 def check(app_dir, zekra_dir=None, work_dir=None, top_n=1, model=None, provider=None,
           heuristic_only=False, func_names=None, force_redetect=False,
+          prune_mode='region_bidir',
           nonce_verifier=None, nonce_path=None, nonce_translator=None, nonce_adjlist=None):
     app_dir = os.path.abspath(app_dir)
-    zekra_dir = os.path.abspath(zekra_dir or os.path.join(REPO_ROOT, 'zekra_java', 'zekra'))
+    zekra_dir = os.path.abspath(zekra_dir or os.path.join(REPO_ROOT, 'zekra_java', 'zekra_roi'))
     work_dir = os.path.abspath(work_dir or os.path.join(app_dir, '_roi_circuit_check'))
     formatted_dir = os.path.join(work_dir, 'formatted_inputs')
     circuit_out_dir = os.path.join(work_dir, 'circuit_output')
@@ -288,7 +289,8 @@ def check(app_dir, zekra_dir=None, work_dir=None, top_n=1, model=None, provider=
     print('[1/4] Detecting + pruning ROI for %s' % app_dir)
     names = roi_extractor.extract_roi(app_dir, top_n=top_n, model=model, provider=provider,
                                        force_heuristic=heuristic_only,
-                                       func_names=func_names, force_redetect=force_redetect)
+                                       func_names=func_names, force_redetect=force_redetect,
+                                       mode=prune_mode)
     if not names:
         print('[roi_circuit_check] FAIL -- could not establish a ROI; aborting.')
         return False
@@ -368,6 +370,7 @@ if __name__ == '__main__':
     heuristic_only = False
     func_names = None
     force_redetect = False
+    prune_mode = 'region_bidir'
     nonce_verifier = None
     nonce_path = None
     nonce_translator = None
@@ -376,7 +379,8 @@ if __name__ == '__main__':
         opts, args = getopt.getopt(sys.argv[1:], 'ha:',
                                     ['zekra-dir=', 'work-dir=', 'top-n=', 'model=',
                                      'provider=', 'heuristic-only', 'function=',
-                                     'force-redetect', 'nonce-verifier=', 'nonce-path=',
+                                     'force-redetect', 'prune-mode=',
+                                     'nonce-verifier=', 'nonce-path=',
                                      'nonce-translator=', 'nonce-adjlist='])
     except getopt.GetoptError as err:
         print(err); usage(); sys.exit(2)
@@ -401,6 +405,8 @@ if __name__ == '__main__':
             func_names = [n.strip() for n in arg.split(',') if n.strip()]
         elif opt == '--force-redetect':
             force_redetect = True
+        elif opt == '--prune-mode':
+            prune_mode = arg
         elif opt == '--nonce-verifier':
             nonce_verifier = int(arg)
         elif opt == '--nonce-path':
@@ -422,7 +428,7 @@ if __name__ == '__main__':
 
     ok = check(app_dir, zekra_dir=zekra_dir, work_dir=work_dir, top_n=top_n, model=model,
                provider=provider, heuristic_only=heuristic_only, func_names=func_names,
-               force_redetect=force_redetect, nonce_verifier=nonce_verifier,
-               nonce_path=nonce_path, nonce_translator=nonce_translator,
-               nonce_adjlist=nonce_adjlist)
+               force_redetect=force_redetect, prune_mode=prune_mode,
+               nonce_verifier=nonce_verifier, nonce_path=nonce_path,
+               nonce_translator=nonce_translator, nonce_adjlist=nonce_adjlist)
     sys.exit(0 if ok else 1)

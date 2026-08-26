@@ -27,13 +27,21 @@ import roi_detector
 
 
 def extract_roi(app_dir, top_n=1, model=None, force_heuristic=False, func_names=None,
-                 provider=None, force_redetect=False):
+                 provider=None, force_redetect=False, mode='region_bidir'):
     """
     If func_names is given, detection is skipped and those names are used
     directly (still validated against the binary's symbol table via `nm`).
     Otherwise roi_detector.detect_roi() chooses the ROI automatically
     (LLM-based with heuristic fallback, cached per app_dir -- see
     roi_detector.py; force_redetect bypasses that cache).
+
+    mode selects the region_prune.py pruning strategy applied once the ROI
+    function(s) are known: 'region_bidir' (default) keeps the ROI plus
+    everything reachable between it and the program's real start/end nodes,
+    producing a richer CFG with many valid paths. 'region' is the older,
+    stricter strategy that keeps ONLY the ROI's own nodes, bridged by
+    synthetic virtual_entry/virtual_exit nodes -- still available for
+    callers that want the smaller, ROI-only circuit.
 
     Returns the function names used to build the ROI, or [] if none could
     be established -- including when the chosen function(s) are valid
@@ -55,10 +63,10 @@ def extract_roi(app_dir, top_n=1, model=None, force_heuristic=False, func_names=
     print('[roi_extractor] ROI function(s) for %s (%s): %s'
           % (app_dir, method, ','.join(names)))
 
-    # region_prune.prune_dir's region mode passes app_dir through to
-    # lookup_function_ranges() itself, which calibrates the PIE rebase delta
-    # -- no need to pre-resolve ranges here first.
-    new_path_info = region_prune.prune_dir(app_dir, mode='region', func_names=names)
+    # region_prune.prune_dir's region/region_bidir modes pass app_dir through
+    # to lookup_function_ranges() itself, which calibrates the PIE rebase
+    # delta -- no need to pre-resolve ranges here first.
+    new_path_info = region_prune.prune_dir(app_dir, mode=mode, func_names=names)
     if new_path_info is None:
         print('[roi_extractor] Region pruning failed for %s -- aborting.' % app_dir)
         return []

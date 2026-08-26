@@ -27,14 +27,14 @@
 # compiled "main" binary. Never writes adjlist_pruned/etc -- that's
 # roi_extractor.py's job.
 
-import os, sys, glob, json, re, getopt, subprocess
+import os, sys, glob, json, re, getopt, subprocess, bisect, time
 import urllib.request, urllib.error
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import region_prune  # read-only reuse: lookup_function_ranges(), read_adjlist()
 
 
-DEFAULT_PROVIDER = os.environ.get('ROI_DETECTOR_PROVIDER', 'anthropic')
+DEFAULT_PROVIDER = os.environ.get('ROI_DETECTOR_PROVIDER', 'gemini')
 DEFAULT_ANTHROPIC_MODEL = os.environ.get('ROI_DETECTOR_MODEL', 'claude-sonnet-4-6')
 # Last-resort guess, only ever used if live Gemini model discovery itself
 # fails (e.g. no network) -- see resolve_gemini_model() / gemini_detect().
@@ -122,6 +122,78 @@ def validate_function_names(app_dir, names):
     return ordered
 
 
+# ─────────────────────── execution-trace visibility ─────────────────────────
+
+def get_trace_addresses(app_dir):
+    """Return a sorted list of every instruction address mentioned in
+    <app_dir>/recorded_path (hex tokens starting with '0x'). Used to detect
+    whether a function's address range was actually traversed during the
+    recorded run -- functions not represented here were inlined away by the
+    compiler and cannot serve as ROI anchors."""
+    path_file = os.path.join(app_dir, 'recorded_path')
+    addrs = set()
+    if not os.path.exists(path_file):
+        return []
+    with open(path_file) as f:
+        for line in f:
+            for tok in line.split():
+                if tok.startswith('0x'):
+                    try:
+                        addrs.add(int(tok, 16))
+                    except ValueError:
+                        pass
+    return sorted(addrs)
+
+
+def _range_intersects_trace(lo, hi, sorted_trace):
+    """True if any address in sorted_trace falls in [lo, hi). O(log n)."""
+    idx = bisect.bisect_left(sorted_trace, lo)
+    return idx < len(sorted_trace) and sorted_trace[idx] < hi
+
+
+def filter_trace_visible(app_dir, binary_path, names):
+    """Filter `names` to those whose address range (PIE-corrected) contains at
+    least one address from the recorded execution path. Preserves ordering.
+
+    Degrades gracefully: if recorded_path is absent, or if *all* candidates
+    fail the filter (e.g. a truly fully-inlined function), returns the
+    original `names` unchanged so that prune_dir() can surface the real error
+    rather than silently returning an empty list here."""
+    sorted_trace = get_trace_addresses(app_dir)
+    if not sorted_trace:
+        return names  # no trace data -- can't filter, pass through
+    try:
+        ranges = region_prune.lookup_function_ranges(binary_path, names, app_dir=app_dir)
+    except FileNotFoundError:
+        return names
+    visible = {name for lo, hi, name in ranges if _range_intersects_trace(lo, hi, sorted_trace)}
+    filtered = [n for n in names if n in visible]
+    if not filtered:
+        print('[roi_detector] Warning: %s not found in recorded_path (likely inlined '
+              'at -Os) -- passing through unfiltered; prune_dir() will report the '
+              'real failure.' % ', '.join(names))
+        return names
+    return filtered
+
+
+def get_trace_visible_function_names(app_dir):
+    """Names of every non-excluded defined function whose address range
+    intersects the recorded execution path. Returns [] if the recorded_path
+    is absent or the binary is missing. Used to inform the LLM which
+    functions it may safely anchor the ROI on."""
+    binary_path = os.path.join(app_dir, 'main')
+    sorted_trace = get_trace_addresses(app_dir)
+    if not sorted_trace:
+        return []
+    funcs = list_defined_functions(binary_path)
+    if not funcs:
+        return []
+    delta = region_prune.detect_rebase_delta(app_dir, binary_path)
+    return [name for addr, size, name in funcs
+            if name not in EXCLUDE_FUNCTIONS
+            and _range_intersects_trace(addr + delta, addr + size + delta, sorted_trace)]
+
+
 # ──────────────────────── address-space reconciliation ───────────────────────
 # `nm` reports a binary's linked (file) addresses, but angr/CLE rebases PIE
 # binaries at runtime, so nm's addresses and the CFG's (adjlist/translator)
@@ -159,20 +231,25 @@ def heuristic_detect(app_dir, top_n=1):
         node_addrs = list(G.nodes())
 
     delta = region_prune.detect_rebase_delta(app_dir, binary_path)
+    sorted_trace = get_trace_addresses(app_dir)
 
     scored = []
     for addr, size, name in funcs:
         lo, hi = addr + delta, addr + size + delta
         node_count = sum(1 for a in node_addrs if lo <= a < hi)
         density = node_count / size if size else 0
-        scored.append((density, node_count, name))
+        in_trace = bool(sorted_trace and _range_intersects_trace(lo, hi, sorted_trace))
+        scored.append((density, node_count, in_trace, name))
 
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
-    # See docstring above: prefer >=2-node functions, degrade to >0, then all.
-    branchy = [s for s in scored if s[1] >= 2]
-    with_activity = [s for s in scored if s[1] > 0]
-    ranked = branchy or with_activity or scored
-    return [name for _, _, name in ranked[:top_n]]
+    # Prefer trace-visible functions (not inlined) first, then fall back to
+    # CFG-based tiers.  Each tier degrades to the next rather than hard-failing.
+    branchy_trace = [s for s in scored if s[1] >= 2 and s[2]]
+    branchy       = [s for s in scored if s[1] >= 2]
+    active_trace  = [s for s in scored if s[1] >  0 and s[2]]
+    with_activity = [s for s in scored if s[1] >  0]
+    ranked = branchy_trace or branchy or active_trace or with_activity or scored
+    return [name for _, _, _, name in ranked[:top_n]]
 
 
 # ─────────────────────────── LLM detection ───────────────────────────────────
@@ -189,10 +266,17 @@ Pick {top_n} function name(s) (fewer is fine if the source clearly has a single 
 function). Use the exact function names as they appear in the C source. Respond with ONLY \
 a JSON object, no other text, in exactly this form:
 {{"functions": ["function_name", ...], "reasoning": "one sentence"}}
-
+{trace_hint}
 Source code:
 {source}
 '''
+
+_TRACE_HINT_TEMPLATE = (
+    '\nIMPORTANT: You MUST choose only from the following functions. These are the '
+    'only functions confirmed present in the recorded execution trace -- all others '
+    'were inlined away by the compiler (-Os) and cannot anchor the circuit:\n'
+    '  {names}\n'
+)
 
 
 def parse_llm_response(text):
@@ -235,7 +319,9 @@ def anthropic_detect(app_dir, top_n=1, model=None):
         print('[roi_detector] No C source found in %s -- skipping LLM detection.' % app_dir)
         return None
 
-    prompt = LLM_PROMPT_TEMPLATE.format(top_n=top_n, source=source)
+    trace_fns = get_trace_visible_function_names(app_dir)
+    trace_hint = _TRACE_HINT_TEMPLATE.format(names=', '.join(trace_fns)) if trace_fns else ''
+    prompt = LLM_PROMPT_TEMPLATE.format(top_n=top_n, source=source, trace_hint=trace_hint)
     model = model or DEFAULT_ANTHROPIC_MODEL
 
     try:
@@ -328,6 +414,24 @@ def _gemini_generate_content(api_key, model, prompt):
     return ''.join(p.get('text', '') for p in parts)
 
 
+def _gemini_call_with_retry(api_key, model, prompt, max_retries=2, base_wait_s=65):
+    """Wraps _gemini_generate_content with exponential-backoff retry on HTTP 429.
+    base_wait_s=65 is just over one full minute, safe for a 1 RPM free-tier limit.
+    Retries: 65 s, then 130 s.  Raises the last HTTPError if still failing after
+    max_retries, so the caller can decide whether to fall back to heuristic."""
+    for attempt in range(max_retries + 1):
+        try:
+            return _gemini_generate_content(api_key, model, prompt)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < max_retries:
+                wait_s = base_wait_s * (2 ** attempt)   # 65 s, then 130 s
+                print('[roi_detector] HTTP 429 rate limit -- waiting %ds before retry '
+                      '(%d/%d)...' % (wait_s, attempt + 1, max_retries))
+                time.sleep(wait_s)
+                continue
+            raise   # non-429 or retries exhausted -- let gemini_detect handle it
+
+
 def _gemini_model_attempts(api_key, preferred):
     """Yields model ids to try, lazily: `preferred` first (if given), then a
     live-discovered model (only computed if actually needed -- i.e. if the
@@ -363,7 +467,9 @@ def gemini_detect(app_dir, top_n=1, model=None):
         print('[roi_detector] No C source found in %s -- skipping Gemini detection.' % app_dir)
         return None
 
-    prompt = LLM_PROMPT_TEMPLATE.format(top_n=top_n, source=source)
+    trace_fns = get_trace_visible_function_names(app_dir)
+    trace_hint = _TRACE_HINT_TEMPLATE.format(names=', '.join(trace_fns)) if trace_fns else ''
+    prompt = LLM_PROMPT_TEMPLATE.format(top_n=top_n, source=source, trace_hint=trace_hint)
     preferred_model = model or os.environ.get('ROI_DETECTOR_GEMINI_MODEL')
 
     text, tried = None, []
@@ -372,7 +478,7 @@ def gemini_detect(app_dir, top_n=1, model=None):
             continue
         tried.append(attempt_model)
         try:
-            text = _gemini_generate_content(api_key, attempt_model, prompt)
+            text = _gemini_call_with_retry(api_key, attempt_model, prompt)
             break
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
@@ -475,12 +581,14 @@ def detect_roi(app_dir, top_n=1, model=None, force_heuristic=False, provider=Non
                 return validated, cached.get('method')
 
     names, method = None, None
+    binary_path = os.path.join(app_dir, 'main')
 
     if not force_heuristic:
         llm_names = llm_detect(app_dir, top_n=top_n, model=model, provider=provider)
         validated = validate_function_names(app_dir, llm_names) if llm_names else []
         if validated:
-            names, method = validated, resolved_provider
+            names = filter_trace_visible(app_dir, binary_path, validated)
+            method = resolved_provider
         elif llm_names:
             print('[roi_detector] LLM suggested %s but none resolved in the binary '
                   '-- falling back to heuristic.' % llm_names)
@@ -489,7 +597,8 @@ def detect_roi(app_dir, top_n=1, model=None, force_heuristic=False, provider=Non
         heuristic_names = heuristic_detect(app_dir, top_n=top_n)
         validated = validate_function_names(app_dir, heuristic_names)
         if validated:
-            names, method = validated, 'heuristic'
+            names = filter_trace_visible(app_dir, binary_path, validated)
+            method = 'heuristic'
 
     if names:
         _save_cache(app_dir, cache_key, names, method)

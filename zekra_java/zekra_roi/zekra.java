@@ -374,6 +374,7 @@ public class zekra extends CircuitGenerator {
             eAndR1[i][j].mapValue(eAndR1Vals[j], CircuitGenerator.__getActiveCircuitGenerator().__getCircuitEvaluator());
           }
 
+
           state = destNode;
         }
       }
@@ -469,7 +470,7 @@ public class zekra extends CircuitGenerator {
               currNodeNeighbors = currNodeNeighbors.add(ADJLIST[adjIdx].mul(adjIsMatch));
             }
 
-            // v.t. neighbor equation equals the current node's neighbors 
+            // v.t. neighbor equation equals the current node's neighbors
             FieldElement neighborEqProd = new FieldElement(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), new BigInteger("0"));
             for (int j = 0, k = 0; j < ADJLIST_LEVELS * 2; j += 2, k += (BUCKET_BITWIDTH + 8)) {
               neighborEqProd.assign(neighborEqProd.add(neighborEq[i][j].mul(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), BigInteger.valueOf(2).pow(k)))));
@@ -530,7 +531,7 @@ public class zekra extends CircuitGenerator {
             currNodeNeighbors = currNodeNeighbors.add(ADJLIST[adjIdx].mul(adjIsMatch));
           }
 
-          // v.t. neighbor equation equals the current node's neighbors 
+          // v.t. neighbor equation equals the current node's neighbors
           FieldElement neighborEqProd = new FieldElement(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), new BigInteger("0"));
           for (int j = 0, k = 0; j < ADJLIST_LEVELS * 2; j += 2, k += (BUCKET_BITWIDTH + 8)) {
             neighborEqProd = neighborEqProd.add(neighborEq[i][j].mul(FieldElement.instantiateFrom(new BigInteger("21888242871839275222246405745257275088548364400416034343698204186575808495617"), BigInteger.valueOf(2).pow(k))));
@@ -594,7 +595,7 @@ public class zekra extends CircuitGenerator {
               boolean c_a0a0a0a2a01a16a86 = CircuitGenerator.__getActiveCircuitGenerator().__checkConstantState(bit_a0a0a0a2a01a16a86);
               if (c_a0a0a0a2a01a16a86) {
                 if (bit_a0a0a0a2a01a16a86.getConstantValue()) {
-                  // verify return address integrity 
+                  // verify return address integrity
                   FieldElement shadowAddr = pop().copy();
                   shadowAddr.forceEqual(destNode);
                 } else {
@@ -603,7 +604,7 @@ public class zekra extends CircuitGenerator {
               } else {
                 ConditionalScopeTracker.pushMain();
                 ConditionalScopeTracker.push(bit_a0a0a0a2a01a16a86);
-                // verify return address integrity 
+                // verify return address integrity
                 FieldElement shadowAddr = pop().copy();
                 shadowAddr.forceEqual(destNode);
 
@@ -633,7 +634,7 @@ public class zekra extends CircuitGenerator {
             boolean c_a0a01a16a86_0 = CircuitGenerator.__getActiveCircuitGenerator().__checkConstantState(bit_a0a01a16a86_0);
             if (c_a0a01a16a86_0) {
               if (bit_a0a01a16a86_0.getConstantValue()) {
-                // verify return address integrity 
+                // verify return address integrity
                 FieldElement shadowAddr = pop().copy();
                 shadowAddr.forceEqual(destNode);
               } else {
@@ -642,7 +643,7 @@ public class zekra extends CircuitGenerator {
             } else {
               ConditionalScopeTracker.pushMain();
               ConditionalScopeTracker.push(bit_a0a01a16a86_0);
-              // verify return address integrity 
+              // verify return address integrity
               FieldElement shadowAddr = pop().copy();
               shadowAddr.forceEqual(destNode);
 
